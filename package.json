@@ -1,17 +1,13 @@
 {
   "name": "multiplayer-tetris",
   "version": "1.0.0",
-  "description": "A multiplayer Tetris game with competitive features",
+  "description": "A multiplayer Tetris game",
   "main": "server.js",
   "scripts": {
-    "start": "node server.js",
-    "dev": "nodemon server.js"
+    "start": "node server.js"
   },
   "dependencies": {
     "express": "^4.17.1",
     "socket.io": "^4.5.4"
-  },
-  "engines": {
-    "node": ">=14.0.0"
   }
 } 

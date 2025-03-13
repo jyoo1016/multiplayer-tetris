@@ -1,19 +1,3 @@
-const canvas = document.getElementById('gameCanvas');
-const ctx = canvas.getContext('2d');
-const startButton = document.getElementById('startButton');
-const scoreElement = document.getElementById('score');
-
-const gridSize = 20;
-const tileCount = canvas.width / gridSize;
-
-let snake = [];
-let food = {};
-let direction = 'right';
-let score = 0;
-let gameLoop = null;
-let gameSpeed = 100;
-let gameStarted = false;
-
 // Game constants
 const COLS = 10;
 const ROWS = 20;
@@ -269,152 +253,11 @@ const gameScreen = document.getElementById('game-screen');
 const playerNameInput = document.getElementById('player-name');
 const joinButton = document.getElementById('join-btn');
 const waitingMessage = document.getElementById('waiting-message');
+const waitingRoom = document.getElementById('waiting-room');
+const waitingPlayersList = document.getElementById('waiting-players-list');
 const player1Name = document.getElementById('player1-name');
 const player2Name = document.getElementById('player2-name');
-const statusMessage = document.getElementById('status-message');
-const waitingPlayersList = document.getElementById('waiting-players-list');
-const waitingRoom = document.getElementById('waiting-room');
-
-function initGame() {
-    // Initialize snake
-    snake = [
-        { x: 5, y: 5 },
-        { x: 4, y: 5 },
-        { x: 3, y: 5 }
-    ];
-    
-    // Initialize food
-    generateFood();
-    
-    // Reset score
-    score = 0;
-    scoreElement.textContent = score;
-    
-    // Set initial direction
-    direction = 'right';
-}
-
-function generateFood() {
-    food = {
-        x: Math.floor(Math.random() * tileCount),
-        y: Math.floor(Math.random() * tileCount)
-    };
-    
-    // Make sure food doesn't spawn on snake
-    for (let segment of snake) {
-        if (segment.x === food.x && segment.y === food.y) {
-            generateFood();
-            break;
-        }
-    }
-}
-
-function drawGame() {
-    // Clear canvas
-    ctx.fillStyle = 'black';
-    ctx.fillRect(0, 0, canvas.width, canvas.height);
-    
-    // Draw snake
-    ctx.fillStyle = 'lime';
-    for (let segment of snake) {
-        ctx.fillRect(segment.x * gridSize, segment.y * gridSize, gridSize - 2, gridSize - 2);
-    }
-    
-    // Draw food
-    ctx.fillStyle = 'red';
-    ctx.fillRect(food.x * gridSize, food.y * gridSize, gridSize - 2, gridSize - 2);
-}
-
-function moveSnake() {
-    const head = { x: snake[0].x, y: snake[0].y };
-    
-    switch (direction) {
-        case 'up':
-            head.y--;
-            break;
-        case 'down':
-            head.y++;
-            break;
-        case 'left':
-            head.x--;
-            break;
-        case 'right':
-            head.x++;
-            break;
-    }
-    
-    // Check for collisions with walls
-    if (head.x < 0 || head.x >= tileCount || head.y < 0 || head.y >= tileCount) {
-        gameOver();
-        return;
-    }
-    
-    // Check for collisions with self
-    for (let segment of snake) {
-        if (head.x === segment.x && head.y === segment.y) {
-            gameOver();
-            return;
-        }
-    }
-    
-    snake.unshift(head);
-    
-    // Check if snake ate food
-    if (head.x === food.x && head.y === food.y) {
-        score += 10;
-        scoreElement.textContent = score;
-        generateFood();
-        // Increase speed every 50 points
-        if (score % 50 === 0) {
-            gameSpeed = Math.max(50, gameSpeed - 10);
-        }
-    } else {
-        snake.pop();
-    }
-}
-
-function gameOver() {
-    clearInterval(gameLoop);
-    gameStarted = false;
-    startButton.textContent = 'Restart Game';
-    alert(`Game Over! Your score: ${score}`);
-}
-
-function startGame() {
-    if (gameStarted) return;
-    
-    gameStarted = true;
-    startButton.textContent = 'Game in Progress';
-    initGame();
-    
-    if (gameLoop) clearInterval(gameLoop);
-    gameLoop = setInterval(() => {
-        moveSnake();
-        drawGame();
-    }, gameSpeed);
-}
-
-// Event listeners
-startButton.addEventListener('click', startGame);
-
-document.addEventListener('keydown', (event) => {
-    if (!gameStarted) return;
-    
-    switch (event.key) {
-        case 'ArrowUp':
-            if (direction !== 'down') direction = 'up';
-            break;
-        case 'ArrowDown':
-            if (direction !== 'up') direction = 'down';
-            break;
-        case 'ArrowLeft':
-            if (direction !== 'right') direction = 'left';
-            break;
-        case 'ArrowRight':
-            if (direction !== 'left') direction = 'right';
-            break;
-    }
-});
+const statusMessage = document.getElementById('game-status');
 
 // Join game button click handler
 joinButton.addEventListener('click', () => {
@@ -423,7 +266,7 @@ joinButton.addEventListener('click', () => {
         console.log('Attempting to join game with name:', name);
         socket.emit('join_game', name);
         joinButton.disabled = true;
-        waitingMessage.style.display = 'block';
+        waitingRoom.style.display = 'block';
         waitingMessage.textContent = 'Joining game...';
     }
 });
@@ -431,7 +274,7 @@ joinButton.addEventListener('click', () => {
 // Socket event handlers
 socket.on('waiting_players_update', (players) => {
     console.log('Received waiting players update:', players);
-    waitingPlayersList.innerHTML = '<h3>Players Waiting:</h3>';
+    waitingPlayersList.innerHTML = '<h3>Players in Waiting List:</h3>';
     if (players.length === 0) {
         waitingPlayersList.innerHTML += '<p>No players waiting</p>';
     } else {
@@ -448,15 +291,16 @@ socket.on('waiting_players_update', (players) => {
 socket.on('join_error', (message) => {
     alert(message);
     joinButton.disabled = false;
+    waitingRoom.style.display = 'none';
 });
 
 socket.on('waiting_for_player', () => {
     console.log('Now waiting for another player');
-    waitingMessage.style.display = 'block';
     waitingMessage.textContent = 'Waiting for another player to join...';
 });
 
 socket.on('game_start', (data) => {
+    console.log('Game starting:', data);
     gameId = data.gameId;
     player = data.player1;
     opponent = data.player2;
@@ -485,7 +329,18 @@ socket.on('game_start', (data) => {
         lastTime = time;
 
         playerGame.update(deltaTime);
-        requestAnimationFrame(update);
+        
+        // Send game state to opponent
+        socket.emit('game_update', {
+            gameId: gameId,
+            grid: playerGame.grid,
+            score: playerGame.score,
+            lines: playerGame.lines
+        });
+
+        if (!playerGame.gameOver) {
+            requestAnimationFrame(update);
+        }
     }
     update();
 

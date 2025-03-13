@@ -1,120 +1,107 @@
 const express = require('express');
 const app = express();
 const http = require('http').createServer(app);
-const io = require('socket.io')(http, {
-    cors: {
-        origin: "*",
-        methods: ["GET", "POST"]
-    }
-});
+const io = require('socket.io')(http);
 
+// Serve static files
 app.use(express.static(__dirname));
 
+// Store waiting players and active games
 const waitingPlayers = new Map();
 const activeGames = new Map();
 
-// Function to broadcast waiting players list
-function broadcastWaitingPlayers() {
-    const waitingPlayersList = Array.from(waitingPlayers.values());
-    io.emit('waiting_players_update', waitingPlayersList);
-}
-
+// Socket.IO connection handling
 io.on('connection', (socket) => {
     console.log('A user connected');
 
-    // Send current waiting players list to new connection
-    broadcastWaitingPlayers();
-
     socket.on('join_game', (playerName) => {
-        console.log(`Player ${playerName} trying to join`);
+        console.log(`${playerName} wants to join the game`);
         
-        // Check if player is already in waiting list
-        for (const [existingSocket, name] of waitingPlayers) {
-            if (name === playerName) {
-                socket.emit('join_error', 'Name already taken');
-                return;
-            }
-        }
-
-        // Check if there's a waiting player
-        let opponent = null;
-        for (const [waitingSocket, name] of waitingPlayers) {
-            if (waitingSocket !== socket) {
-                opponent = waitingSocket;
-                break;
-            }
-        }
-
-        if (opponent) {
-            // Start a game with the waiting player
-            const gameId = `game_${Date.now()}`;
-            const opponentName = waitingPlayers.get(opponent);
-            waitingPlayers.delete(opponent);
+        // Check if there are any waiting players
+        if (waitingPlayers.size > 0) {
+            // Get the first waiting player
+            const [waitingSocketId, waitingPlayerName] = waitingPlayers.entries().next().value;
+            const waitingSocket = io.sockets.sockets.get(waitingSocketId);
             
-            // Create game room
-            socket.join(gameId);
-            opponent.join(gameId);
-
-            // Store game information
+            // Create a new game
+            const gameId = Date.now().toString();
             activeGames.set(gameId, {
-                player1: { socket: opponent, name: opponentName },
-                player2: { socket: socket, name: playerName }
-            });
-
-            console.log(`Game ${gameId} started between ${opponentName} and ${playerName}`);
-
-            // Notify both players that game is starting
-            io.to(gameId).emit('game_start', {
-                player1: opponentName,
+                player1: waitingPlayerName,
                 player2: playerName,
-                gameId: gameId
+                player1Socket: waitingSocketId,
+                player2Socket: socket.id
             });
 
-            // Update waiting players list
-            broadcastWaitingPlayers();
+            // Remove waiting player
+            waitingPlayers.delete(waitingSocketId);
+
+            // Notify both players that the game is starting
+            waitingSocket.emit('game_start', {
+                gameId: gameId,
+                player1: waitingPlayerName,
+                player2: playerName
+            });
+            socket.emit('game_start', {
+                gameId: gameId,
+                player1: waitingPlayerName,
+                player2: playerName
+            });
+
+            // Update waiting players list for everyone
+            io.emit('waiting_players_update', Array.from(waitingPlayers.values()));
         } else {
             // Add player to waiting list
-            waitingPlayers.set(socket, playerName);
-            console.log(`Player ${playerName} added to waiting list`);
+            waitingPlayers.set(socket.id, playerName);
             socket.emit('waiting_for_player');
             
-            // Update waiting players list
-            broadcastWaitingPlayers();
+            // Update waiting players list for everyone
+            io.emit('waiting_players_update', Array.from(waitingPlayers.values()));
         }
     });
 
     socket.on('game_update', (data) => {
-        socket.to(data.gameId).emit('opponent_update', data);
+        const game = activeGames.get(data.gameId);
+        if (game) {
+            const opponentSocket = game.player1Socket === socket.id ? game.player2Socket : game.player1Socket;
+            io.to(opponentSocket).emit('opponent_update', {
+                grid: data.grid,
+                score: data.score,
+                lines: data.lines
+            });
+        }
     });
 
     socket.on('lines_cleared', (data) => {
-        socket.to(data.gameId).emit('add_penalty_lines', data.lineCount);
+        const game = activeGames.get(data.gameId);
+        if (game) {
+            const opponentSocket = game.player1Socket === socket.id ? game.player2Socket : game.player1Socket;
+            io.to(opponentSocket).emit('add_penalty_lines', data.lineCount);
+        }
     });
 
     socket.on('game_over', (gameId) => {
-        socket.to(gameId).emit('opponent_lost');
-        
-        if (activeGames.has(gameId)) {
-            const game = activeGames.get(gameId);
-            game.player1.socket.leave(gameId);
-            game.player2.socket.leave(gameId);
+        const game = activeGames.get(gameId);
+        if (game) {
+            const opponentSocket = game.player1Socket === socket.id ? game.player2Socket : game.player1Socket;
+            io.to(opponentSocket).emit('opponent_lost');
             activeGames.delete(gameId);
         }
     });
 
     socket.on('disconnect', () => {
-        console.log('User disconnected');
+        console.log('A user disconnected');
         
-        // Remove from waiting players if present
-        if (waitingPlayers.has(socket)) {
-            waitingPlayers.delete(socket);
-            broadcastWaitingPlayers();
+        // Remove from waiting players if they were waiting
+        if (waitingPlayers.has(socket.id)) {
+            waitingPlayers.delete(socket.id);
+            io.emit('waiting_players_update', Array.from(waitingPlayers.values()));
         }
 
-        // Handle disconnection in active games
-        for (const [gameId, game] of activeGames) {
-            if (game.player1.socket === socket || game.player2.socket === socket) {
-                io.to(gameId).emit('opponent_disconnected');
+        // Handle disconnection during active game
+        for (const [gameId, game] of activeGames.entries()) {
+            if (game.player1Socket === socket.id || game.player2Socket === socket.id) {
+                const opponentSocket = game.player1Socket === socket.id ? game.player2Socket : game.player1Socket;
+                io.to(opponentSocket).emit('opponent_disconnected');
                 activeGames.delete(gameId);
                 break;
             }
@@ -122,7 +109,8 @@ io.on('connection', (socket) => {
     });
 });
 
+// Start server
 const PORT = process.env.PORT || 3000;
-http.listen(PORT, '0.0.0.0', () => {
+http.listen(PORT, () => {
     console.log(`Server running on port ${PORT}`);
 }); 
