@@ -1,7 +1,12 @@
 const express = require('express');
 const app = express();
 const http = require('http').createServer(app);
-const io = require('socket.io')(http);
+const io = require('socket.io')(http, {
+    cors: {
+        origin: "*",
+        methods: ["GET", "POST"]
+    }
+});
 
 app.use(express.static(__dirname));
 
@@ -12,6 +17,7 @@ io.on('connection', (socket) => {
     console.log('A user connected');
 
     socket.on('join_game', (playerName) => {
+        console.log(`Player ${playerName} trying to join`);
         // Check if there's a waiting player
         let opponent = null;
         for (const [waitingSocket, name] of waitingPlayers) {
@@ -37,6 +43,8 @@ io.on('connection', (socket) => {
                 player2: { socket: socket, name: playerName }
             });
 
+            console.log(`Game ${gameId} started between ${opponentName} and ${playerName}`);
+
             // Notify both players that game is starting
             io.to(gameId).emit('game_start', {
                 player1: opponentName,
@@ -46,6 +54,7 @@ io.on('connection', (socket) => {
         } else {
             // Add player to waiting list
             waitingPlayers.set(socket, playerName);
+            console.log(`Player ${playerName} added to waiting list`);
             socket.emit('waiting_for_player');
         }
     });
@@ -91,6 +100,6 @@ io.on('connection', (socket) => {
 });
 
 const PORT = process.env.PORT || 3000;
-http.listen(PORT, () => {
+http.listen(PORT, '0.0.0.0', () => {
     console.log(`Server running on port ${PORT}`);
 }); 
