@@ -244,7 +244,17 @@ class Tetris {
 }
 
 // Socket.io connection
-const socket = io();
+const socket = io(window.location.origin);
+
+// Add connection debugging
+socket.on('connect', () => {
+    console.log('Connected to server');
+});
+
+socket.on('connect_error', (error) => {
+    console.log('Connection error:', error);
+});
+
 let gameId = null;
 let player = null;
 let opponent = null;
@@ -410,6 +420,7 @@ document.addEventListener('keydown', (event) => {
 joinButton.addEventListener('click', () => {
     const name = playerNameInput.value.trim();
     if (name) {
+        console.log('Attempting to join game with name:', name);
         socket.emit('join_game', name);
         joinButton.disabled = true;
         waitingMessage.style.display = 'block';
@@ -419,7 +430,7 @@ joinButton.addEventListener('click', () => {
 
 // Socket event handlers
 socket.on('waiting_players_update', (players) => {
-    // Update waiting players list
+    console.log('Received waiting players update:', players);
     waitingPlayersList.innerHTML = '<h3>Players Waiting:</h3>';
     if (players.length === 0) {
         waitingPlayersList.innerHTML += '<p>No players waiting</p>';
@@ -440,6 +451,8 @@ socket.on('join_error', (message) => {
 });
 
 socket.on('waiting_for_player', () => {
+    console.log('Now waiting for another player');
+    waitingMessage.style.display = 'block';
     waitingMessage.textContent = 'Waiting for another player to join...';
 });
 
