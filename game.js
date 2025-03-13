@@ -262,6 +262,8 @@ const waitingMessage = document.getElementById('waiting-message');
 const player1Name = document.getElementById('player1-name');
 const player2Name = document.getElementById('player2-name');
 const statusMessage = document.getElementById('status-message');
+const waitingPlayersList = document.getElementById('waiting-players-list');
+const waitingRoom = document.getElementById('waiting-room');
 
 function initGame() {
     // Initialize snake
@@ -409,14 +411,36 @@ joinButton.addEventListener('click', () => {
     const name = playerNameInput.value.trim();
     if (name) {
         socket.emit('join_game', name);
-        waitingMessage.style.display = 'block';
         joinButton.disabled = true;
+        waitingMessage.style.display = 'block';
+        waitingMessage.textContent = 'Joining game...';
     }
 });
 
 // Socket event handlers
+socket.on('waiting_players_update', (players) => {
+    // Update waiting players list
+    waitingPlayersList.innerHTML = '<h3>Players Waiting:</h3>';
+    if (players.length === 0) {
+        waitingPlayersList.innerHTML += '<p>No players waiting</p>';
+    } else {
+        const ul = document.createElement('ul');
+        players.forEach(player => {
+            const li = document.createElement('li');
+            li.textContent = player;
+            ul.appendChild(li);
+        });
+        waitingPlayersList.appendChild(ul);
+    }
+});
+
+socket.on('join_error', (message) => {
+    alert(message);
+    joinButton.disabled = false;
+});
+
 socket.on('waiting_for_player', () => {
-    waitingMessage.textContent = 'Waiting for another player...';
+    waitingMessage.textContent = 'Waiting for another player to join...';
 });
 
 socket.on('game_start', (data) => {

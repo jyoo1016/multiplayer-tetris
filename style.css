@@ -412,4 +412,38 @@ footer {
         align-items: center;
         gap: 1.5rem;
     }
+}
+
+#waiting-room {
+    margin-top: 20px;
+    padding: 20px;
+    background-color: rgba(42, 42, 42, 0.8);
+    border-radius: 10px;
+}
+
+#waiting-room h2 {
+    color: #00ff00;
+    margin-bottom: 15px;
+}
+
+#waiting-players-list {
+    text-align: left;
+}
+
+#waiting-players-list h3 {
+    color: #00ff00;
+    margin-bottom: 10px;
+}
+
+#waiting-players-list ul {
+    list-style: none;
+    padding: 0;
+}
+
+#waiting-players-list li {
+    padding: 8px;
+    margin: 5px 0;
+    background-color: rgba(0, 255, 0, 0.1);
+    border-radius: 5px;
+    color: #fff;
 } 

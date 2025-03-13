@@ -13,11 +13,29 @@ app.use(express.static(__dirname));
 const waitingPlayers = new Map();
 const activeGames = new Map();
 
+// Function to broadcast waiting players list
+function broadcastWaitingPlayers() {
+    const waitingPlayersList = Array.from(waitingPlayers.values());
+    io.emit('waiting_players_update', waitingPlayersList);
+}
+
 io.on('connection', (socket) => {
     console.log('A user connected');
 
+    // Send current waiting players list to new connection
+    broadcastWaitingPlayers();
+
     socket.on('join_game', (playerName) => {
         console.log(`Player ${playerName} trying to join`);
+        
+        // Check if player is already in waiting list
+        for (const [existingSocket, name] of waitingPlayers) {
+            if (name === playerName) {
+                socket.emit('join_error', 'Name already taken');
+                return;
+            }
+        }
+
         // Check if there's a waiting player
         let opponent = null;
         for (const [waitingSocket, name] of waitingPlayers) {
@@ -32,7 +50,7 @@ io.on('connection', (socket) => {
             const gameId = `game_${Date.now()}`;
             const opponentName = waitingPlayers.get(opponent);
             waitingPlayers.delete(opponent);
-
+            
             // Create game room
             socket.join(gameId);
             opponent.join(gameId);
@@ -51,29 +69,31 @@ io.on('connection', (socket) => {
                 player2: playerName,
                 gameId: gameId
             });
+
+            // Update waiting players list
+            broadcastWaitingPlayers();
         } else {
             // Add player to waiting list
             waitingPlayers.set(socket, playerName);
             console.log(`Player ${playerName} added to waiting list`);
             socket.emit('waiting_for_player');
+            
+            // Update waiting players list
+            broadcastWaitingPlayers();
         }
     });
 
     socket.on('game_update', (data) => {
-        // Forward game updates to opponent
         socket.to(data.gameId).emit('opponent_update', data);
     });
 
     socket.on('lines_cleared', (data) => {
-        // When a player clears lines, send penalty to opponent
         socket.to(data.gameId).emit('add_penalty_lines', data.lineCount);
     });
 
     socket.on('game_over', (gameId) => {
-        // Notify opponent of win
         socket.to(gameId).emit('opponent_lost');
         
-        // Clean up game
         if (activeGames.has(gameId)) {
             const game = activeGames.get(gameId);
             game.player1.socket.leave(gameId);
@@ -86,7 +106,10 @@ io.on('connection', (socket) => {
         console.log('User disconnected');
         
         // Remove from waiting players if present
-        waitingPlayers.delete(socket);
+        if (waitingPlayers.has(socket)) {
+            waitingPlayers.delete(socket);
+            broadcastWaitingPlayers();
+        }
 
         // Handle disconnection in active games
         for (const [gameId, game] of activeGames) {
