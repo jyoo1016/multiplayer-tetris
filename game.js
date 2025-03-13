@@ -206,11 +206,13 @@ class Tetris {
         const rotated = this.rotate(this.piece.shape);
         this.piece.shape = rotated;
         
+        // Try to find a valid position for the rotated piece
         while (this.collide(this.piece.shape, this.piece.pos)) {
             this.piece.pos.x += offset;
             offset = -(offset + (offset > 0 ? 1 : -1));
             if (offset > this.piece.shape[0].length) {
-                this.rotate(this.piece.shape);
+                // If we can't find a valid position, revert the rotation
+                this.piece.shape = this.rotate(this.rotate(this.rotate(rotated)));
                 this.piece.pos = pos;
                 return;
             }
@@ -348,6 +350,11 @@ socket.on('game_start', (data) => {
     document.addEventListener('keydown', event => {
         if (playerGame.gameOver) return;
 
+        // Prevent page scrolling
+        if ([32, 37, 38, 39, 40].includes(event.keyCode)) {
+            event.preventDefault();
+        }
+
         switch (event.keyCode) {
             case 37: // Left
                 playerGame.move(-1);
@@ -361,6 +368,9 @@ socket.on('game_start', (data) => {
             case 38: // Up
                 playerGame.rotate();
                 break;
+            case 32: // Space
+                while (playerGame.drop()) {} // Drop until collision
+                break;
         }
     });
 });
@@ -372,6 +382,9 @@ socket.on('opponent_update', (data) => {
     opponentGame.lines = data.lines;
     document.getElementById('player2-score').textContent = `Score: ${data.score}`;
     document.getElementById('player2-lines').textContent = `Lines: ${data.lines}`;
+    
+    // Draw opponent's game state
+    opponentGame.draw();
 });
 
 socket.on('add_penalty_lines', (count) => {
